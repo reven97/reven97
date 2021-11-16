@@ -1,0 +1,222 @@
+import re
+
+class get_data: 
+    designName=""
+    line=""
+    lines=[]
+    module=""
+    str_map_in=[] #preliminar
+    str_map_inputs=[] #for stimulus
+    str_map_out=[]
+    str_map_outputs=[]
+    
+    def get_info(self):
+        self.open_file()
+        self.get_name()
+        self.get_inputs()
+        self.get_outputs()
+        self.input_list()
+        self.output_list()
+
+    def open_file(self):      
+        designName=input("Enter the file name: ")
+        myFile=open(designName,'r')
+        line=myFile.read()
+        self.lines=line.split("\n")
+        myFile.close()
+    
+    def get_name(self):
+        re_mod="^\\s*module\\s+(\\w+)"
+        for k in self.lines:
+            sm_mod=re.search(re_mod,k)
+            if sm_mod!=None:
+                self.module = sm_mod.group(1)
+
+    def get_inputs(self):
+        re_in="\\s*input\\s*(\\[\\s*\\d+\\s*:\\s*\\d+\\s*\\])?\\s+(.*)$"
+        for b in self.lines:
+            sm_in=re.search(re_in,b)
+            if sm_in!=None:
+                if len(self.str_map_in)>0:
+                    if not sm_in.group(2) in self.str_map_in[0]:
+                        if sm_in.group(1)!=None:
+                            self.str_map_in.append([sm_in.group(2),sm_in.group(1)])
+                        else:
+                            self.str_map_in.append([sm_in.group(2)," "])                        
+                else:
+                    if sm_in.group(1)!=None:
+                        self.str_map_in.append([sm_in.group(2),sm_in.group(1)])
+                    else:
+                        self.str_map_in.append([sm_in.group(2)," "])
+
+    def get_outputs(self):
+        re_out="\\s*output\\s*(reg)?\\s*(\\[\\s*\\d+\\s*:\\s*\\d+\\s*\\])?\\s*(.*)$"
+        for b in self.lines:
+            sm_out=re.search(re_out,b)
+            if sm_out!=None:
+                if len(self.str_map_out)>0:
+                    if not sm_out.group() in self.str_map_out:
+                        if sm_out.group(2)!=None:
+                            self.str_map_out.append([sm_out.group(3),sm_out.group(2)])
+                        else:
+                            self.str_map_out.append([sm_out.group(3)," "])
+                else:
+                    if sm_out.group(1)!=None:
+                        self.str_map_out.append([sm_out.group(3),sm_out.group(2)])
+                    else:
+                        self.str_map_out.append([sm_out.group(3)," "])
+
+    def input_list(self):
+        for i in self.str_map_in:
+            self.str_map_inputs.append([i[0].replace(";",""),i[1]])
+
+
+    def output_list(self):
+        for i in self.str_map_out:
+            self.str_map_outputs.append([i[0].replace(";",""),i[1]])            
+
+class Estimulos:
+    #self.read_vectorfile(module_name,dvars)
+    #self.assign_io(delay,std::map <std::string,std::string>  entradas,map <string,string>  outputsv)
+    #self.sizeofvector(variables)
+    #self.combinaciones (max,entradas)
+
+    def combinaciones(self,max,entradas):
+        comb =2**max
+        text="\n $monitor("+entradas+");\n for (int i =0; i< " +str(comb)+"; i=i+1) begin\n {"+entradas+"} = i;\n #1;\n end\n    "
+        return text
+
+    def sizeofvector(self,variables):
+        total=0
+        for itr in variables:
+            sizev=itr[1]
+            print(sizev)
+            whiteSpacesOnly = sizev.isspace()
+            if whiteSpacesOnly==True:
+                total = total +1
+            else:
+                tmp = re.findall(r'\d+', sizev)
+                #number1 = re.sub("[^0-9]([0-9]+).",r"\g<1>",sizev)
+                #number2 = re.sub(":[^0-9]([0-9]+).",r"\g<1>",sizev)
+                n = list(map(int, tmp))
+                total=(abs(n[0]-n[1])+1)+total
+                
+        return total
+
+    def assign_io(self,delay,inputsv,outputsv):
+        texto = "always@(posedge clk)\n \tbegin\n\t#"+str(delay)+"; {"
+        forinputs = " "
+        foroutputs = " "
+        for itr in inputsv:
+            k=itr[1]
+            c=itr[0]
+            k= k + " ,"
+            forinputs = forinputs +c+k
+        for itr in outputsv:
+            d=itr[0]
+            l=itr[1]
+            l= l + " ,"
+            foroutputs = foroutputs +d+l
+        if (len(foroutputs) > 0):
+            foroutputs=foroutputs[:-1]
+        if (len(forinputs) > 0):
+            forinputs=forinputs[:-1]
+        texto = texto + forinputs+"} = test_vec[vecnum];\n end \n"
+        return forinputs
+
+    def read_vectorfile(self,module_name,dvars):
+        p1="initial begin \n $dumpfile(\""+module_name+".vcd\");\n $dumpvars("+str(dvars)+","+module_name+");\n $readmemb(\"testvector.tv\",test_vec);\n"
+        p2=" end\n"
+        text = p1+p2
+        return text
+
+
+class write_test:
+    name=""
+    inputs=[]
+    outputs=[]
+    scale="1ns/1ns"
+    stimulus=""
+    text_out1=[]
+    modules=[]
+    secuential=False
+    def fill1(self):
+        scale=input("Enter scale time: ")
+        self.text_out1.append("`timescale ")
+        self.text_out1.append(scale)
+        self.text_out1.append("\n")
+        self.text_out1.append(self.write_modules())
+        self.text_out1.append("module ")
+        self.text_out1.append(self.name)
+        self.text_out1.append("_TB;\n")
+        self.text_out1.append(self.write_inputs())
+        self.text_out1.append(self.write_outputs())
+        self.text_out1.append(self.write_dut())
+        self.text_out1.append("\tinitial begin\n")
+        self.text_out1.append("\t\t$dumpfile(\"")
+        self.text_out1.append(self.name)
+        self.text_out1.append(".vcd\");\n")
+        self.text_out1.append("\t\t$dumpvars(1, ")
+        self.text_out1.append(self.name)
+        self.text_out1.append("_TB);\n")
+        self.text_out1.append(self.stimulus)
+        self.text_out1.append("\t\t$finish;\n")
+        self.text_out1.append("\tend\n")
+        if (self.secuential==True):
+            self.text_out1.append("\t\talways #1 clk=~clk;\n")
+
+        self.text_out1.append("endmodule\n")
+        
+
+    def write_inputs(self):
+        text_inputs=""
+        for i in self.inputs:
+            text_inputs=text_inputs+"\treg "+i[1]+" "+i[0]+";\n"
+        
+        return text_inputs
+
+    def write_outputs(self):
+        text_outputs=""
+        for o in self.outputs:
+            text_outputs=text_outputs+"\twire "+o[1]+" "+o[0]+";\n"
+        
+        return text_outputs
+
+    def write_dut(self):
+        text_dut=""
+        text_dut=text_dut+"\t"+self.name+" DUT("
+        for i in self.inputs:
+            text_dut=text_dut+" ."+i[0]+"("+i[0]+"),"
+        for o in self.outputs:
+            text_dut=text_dut+" ."+o[0]+"("+o[0]+"),"
+        text_dut=text_dut[:-1]
+        text_dut=text_dut+");\n"
+        return text_dut
+
+    def write_modules(self):
+        text_modules=""
+        if len(self.modules)>0:
+            for k in self.modules:
+                text_modules=text_modules+"`include \""+k+".sv\"\n"
+        return text_modules
+
+    def save(self):
+        f=open("testbench.sv",'w')
+        for j in self.text_out1:
+            f.write(j)
+        f.close()
+
+
+combin=Estimulos()
+testbench=write_test()
+test=get_data()
+test.get_info()
+testbench.name=test.module
+testbench.inputs=test.str_map_inputs
+testbench.outputs=test.str_map_outputs
+print(test.str_map_outputs)
+entrada = combin.sizeofvector(test.str_map_inputs)
+entrav = combin.assign_io(1,test.str_map_inputs,test.str_map_outputs)
+testbench.stimulus=combin.combinaciones(entrada,entrav)
+testbench.fill1()
+testbench.save()
